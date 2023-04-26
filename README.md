@@ -6,7 +6,46 @@ This template should help get you started developing with Vue 3 in Vite. The tem
 
 由于 vue-pdf-embed 库在 vue3 项目中使用 CDN 时报错：`Uncaught TypeError: Cannot read properties of undefined (reading 'createVNode')`，且作者未给出解决方法（源码是vue2写的），所以自己封装一个基于vue3的pdf组件。
 
-## 引入 pdf.worker.js
+### Props
+
+| Name                   | Type                                     | Accepted values                                  | Description                                                                |
+| ---------------------- | ---------------------------------------- | ------------------------------------------------ | -------------------------------------------------------------------------- |
+| disableAnnotationLayer | `boolean`                                | `true` or `false`                                | whether the annotation layer should be disabled                            |
+| disableTextLayer       | `boolean`                                | `true` or `false`                                | whether the text layer should be disabled                                  |
+| height                 | `number` <br> `string`                   | natural numbers                                  | desired page height in pixels (ignored if the width property is specified) |
+| imageResourcesPath     | `string`                                 | URL or path with trailing slash                  | path for icons used in the annotation layer                                |
+| page                   | `number`                                 | `1` to the last page number                      | number of the page to display (displays all pages if not specified)        |
+| rotation               | `number` <br> `string`                   | `0`, `90`, `180` or `270` (multiples of `90`)    | desired page rotation angle in degrees                                     |
+| scale                  | `number`                                 | rational numbers                                 | desired ratio of canvas size to document size                              |
+| source                 | `string` <br> `object` <br> `Uint8Array` | document URL or typed array pre-filled with data | source of the document to display                                          |
+| width                  | `number` <br> `string`                   | natural numbers                                  | desired page width in pixels                                               |
+
+### Events
+
+| Name                  | Value                         | Description                                |
+| --------------------- | ----------------------------- | ------------------------------------------ |
+| internal-link-clicked | destination page number       | internal link was clicked                  |
+| loading-failed        | error object                  | failed to load document                    |
+| loaded                | PDF document proxy            | finished loading the document              |
+| password-requested    | callback function, retry flag | password is needed to display the document |
+| rendering-failed      | error object                  | failed to render document                  |
+| rendered              | –                             | finished rendering the document            |
+| printing-failed       | error object                  | failed to print document                   |
+| progress              | progress params object        | tracking document loading progress         |
+
+### Public Methods
+
+| Name   | Arguments                                                                    | Description                          |
+| ------ | ---------------------------------------------------------------------------- | ------------------------------------ |
+| render | –                                                                            | manually (re)render document         |
+| print  | print resolution (`number`), filename (`string`), all pages flag (`boolean`) | print document via browser interface |
+
+**Note:** Public methods can be accessed via a [template ref](https://vuejs.org/guide/essentials/template-refs.html).
+
+
+## 一些解释
+
+### 引入 pdf.worker.js
 
 pdfjs-dist是一个用于在Web上显示PDF文件的JavaScript库，它是由Mozilla开发的pdf.js的一个分支。pdfjs-dist中包含了pdf.js库的完整代码，同时还提供了一些封装好的方法和工具函数，方便开发者使用。
 
@@ -18,7 +57,7 @@ GlobalWorkerOptions.workerSrc属性指定了PDFWorker的代码文件所在的位
 pdf.GlobalWorkerOptions.workerSrc = '/path/to/worker.js';
 ```
 
-## PDFLinkService
+### PDFLinkService
 
 pdfjs-dist中的PDFLinkService是一个用于处理PDF文档中链接的JavaScript类。PDFLinkService提供了一些方法和属性，可以让您方便地处理PDF文档中的链接，并在用户点击链接时执行相应的操作。
 
