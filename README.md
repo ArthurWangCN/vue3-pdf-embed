@@ -71,3 +71,6 @@ PDFLinkService的主要作用如下：
 在pdfjs-dist中，PDFLinkService通常与PDFViewer和PDFThumbnailViewer一起使用，以实现完整的PDF查看器功能。PDFLinkService可以在PDFViewer或PDFThumbnailViewer中注册，并通过相应的事件处理函数来处理链接的点击事件和鼠标悬停事件。
 
 如果您正在使用pdfjs-dist开发自己的PDF查看器，可以使用PDFLinkService来方便地处理PDF文档中的链接，并为用户提供更好的交互体验。
+
+
+based on https://github.com/hrynko/vue-pdf-embed
