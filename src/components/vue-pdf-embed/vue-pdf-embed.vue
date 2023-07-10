@@ -10,20 +10,16 @@
   </div>
 </template>
 
-<script setup>
-import { computed, onBeforeUnmount, onMounted, ref, toRaw, watch } from 'vue';
-import * as pdf from 'pdfjs-dist/legacy/build/pdf.js';
+<script setup lang="ts">
+import { computed, onBeforeUnmount, onMounted, ref, shallowRef, toRaw, watch } from 'vue';
+import * as pdf from 'pdfjs-dist';
+import type { PDFDocumentProxy, PDFPageProxy } from 'pdfjs-dist';
 import { PDFLinkService } from 'pdfjs-dist/legacy/web/pdf_viewer.js';
 
-import { emptyElement, releaseChildCanvases } from './util.js';
-// pdf.GlobalWorkerOptions.workerSrc = new URL('pdfjs-dist/build/pdf.worker.js', import.meta.url);
-import pdfjsWorker from 'pdfjs-dist/build/pdf.worker.entry';
-pdf.GlobalWorkerOptions.workerSrc = pdfjsWorker;
-// pdf.GlobalWorkerOptions.workerSrc =
-//   'https://res.dafenqi.law/work-wechat-prod/20230425/e63ef940f2834ea6bedb0caee8594511.js';
-// pdf.GlobalWorkerOptions.workerSrc = 'https://cdn.bootcdn.net/ajax/libs/pdf.js/2.16.105/pdf.worker.min.js'
+import { emptyElement, releaseChildCanvases } from './util';
+pdf.GlobalWorkerOptions.workerSrc = 'https://cdn.bootcdn.net/ajax/libs/pdf.js/2.16.105/pdf.worker.js';
 
-const pdfEmbed = ref(null);
+const pdfEmbed = ref<HTMLDivElement>();
 
 const props = defineProps({
   /**
@@ -79,7 +75,7 @@ const props = defineProps({
   rotation: {
     type: [Number, String],
     validator(value) {
-      if (value % 90 !== 0) {
+      if (Number(value) % 90 !== 0) {
         throw new Error('Rotation must be 0 or a multiple of 90.');
       }
       return true;
@@ -99,7 +95,7 @@ const props = defineProps({
    * @values Object, String, URL, TypedArray
    */
   source: {
-    type: [Object, String, URL, Uint8Array],
+    type: [String, URL, Uint8Array],
     required: true,
   },
   /**
@@ -123,10 +119,11 @@ const emits = defineEmits([
   'printing-failed',
 ]);
 
-const pdfDocument = ref(null);
-const pageCount = ref(null);
-const pageNums = ref([]);
+const pdfDocument = shallowRef<PDFDocumentProxy | null>();
+const pageCount = ref<Number>();
+const pageNums = ref<Number[]>([]);
 
+// 处理PDF文档中链接
 const linkService = computed(() => {
   if (!pdfDocument.value || props.disableAnnotationLayer) {
     return null;
@@ -166,14 +163,14 @@ watch(
  * aspect ratio.
  * @param {number} ratio - Page aspect ratio.
  */
-const getPageDimensions = ratio => {
-  let width, height;
+const getPageDimensions = (ratio: number) => {
+  let width: number, height: number;
 
   if (props.height && !props.width) {
-    height = props.height;
+    height = Number(props.height);
     width = height / ratio;
   } else {
-    width = props.width || pdfEmbed.value.clientWidth;
+    width = Number(props.width || pdfEmbed.value?.clientWidth);
     height = width * ratio;
   }
 
@@ -192,24 +189,21 @@ const load = async () => {
   }
 
   try {
-    if (props.source._pdfInfo) {
-      pdfDocument.value = props.source;
-    } else {
-      const documentLoadingTask = pdf.getDocument(props.source);
-      documentLoadingTask.onProgress = progressParams => {
-        emits('progress', progressParams);
-      };
-      documentLoadingTask.onPassword = (callback, reason) => {
-        const retry = reason === pdf.PasswordResponses.INCORRECT_PASSWORD;
-        emits('password-requested', callback, retry);
-      };
-      pdfDocument.value = await documentLoadingTask.promise;
-    }
+    const documentLoadingTask = pdf.getDocument(props.source);
+    documentLoadingTask.onProgress = progressParams => {
+      emits('progress', progressParams);
+    };
+    documentLoadingTask.onPassword = (callback, reason) => {
+      const retry = reason === pdf.PasswordResponses.INCORRECT_PASSWORD;
+      emits('password-requested', callback, retry);
+    };
+    pdfDocument.value = await documentLoadingTask.promise;
+
     pageCount.value = pdfDocument.value?.numPages;
     emits('loaded', pdfDocument.value);
   } catch (e) {
     pdfDocument.value = null;
-    pageCount.value = null;
+    pageCount.value = 0;
     pageNums.value = [];
     emits('loading-failed', e);
   }
@@ -229,12 +223,15 @@ const render = async () => {
     pageNums.value = props.page ? [props.page] : [...Array(pdfDocument.value.numPages + 1).keys()].slice(1);
     await Promise.all(
       pageNums.value.map(async (pageNum, i) => {
-        const page = await toRaw(pdfDocument.value).getPage(pageNum);
-        const [canvas, div1, div2] = pdfEmbed.value.children[i].children;
-        const pageRotation = props.rotation + page.rotate;
+        const page = await pdfDocument.value!.getPage(Number(pageNum));
+        if (!pdfEmbed.value) return;
+        const canvas = pdfEmbed.value.children[i].children[0] as HTMLCanvasElement;
+        const div1 = pdfEmbed.value.children[i].children[1] as HTMLDivElement;
+        const div2 = pdfEmbed.value.children[i].children[2] as HTMLDivElement;
+        const pageRotation = Number(props.rotation) + page.rotate;
         const pageRation = (page?.rotate / 90) % 2 ? page.view[2] / page.view[3] : page.view[3] / page.view[2];
         const [actualWidth, actualHeight] = getPageDimensions(pageRation);
-        if ((props.rotation / 90) % 2) {
+        if ((Number(props.rotation) / 90) % 2) {
           canvas.style.width = `${Math.floor(actualHeight)}px`;
           canvas.style.height = `${Math.floor(actualWidth)}px`;
         } else {
@@ -258,7 +255,7 @@ const render = async () => {
   } catch (e) {
     console.error(e);
     pdfDocument.value = null;
-    pageCount.value = null;
+    pageCount.value = 0;
     pageNums.value = [];
     emits('rendering-failed', e);
   }
@@ -271,18 +268,18 @@ const render = async () => {
  * @param {number} width - Actual page width.
  * @param {number} rotation - rotation
  */
-const renderPage = async (page, canvas, width, rotation) => {
+const renderPage = async (page: PDFPageProxy, canvas: HTMLCanvasElement, width: number, rotation: number) => {
   const num = Number(Math.ceil(width / page.view[2])) + 1;
   const viewport = page.getViewport({
     scale: props.scale * 1 || num,
-    rotation: rotation,
+    rotation: Number(rotation),
   });
 
   canvas.width = viewport.width;
   canvas.height = viewport.height;
 
   await page.render({
-    canvasContext: canvas.getContext('2d'),
+    canvasContext: canvas.getContext('2d') as CanvasRenderingContext2D,
     viewport,
   }).promise;
 };
@@ -293,23 +290,24 @@ const renderPage = async (page, canvas, width, rotation) => {
  * @param {HTMLElement} container - HTML container.
  * @param {number} width - Actual page width.
  */
-const renderPageAnnotationLayer = async (page, container, width) => {
+const renderPageAnnotationLayer = async (page: PDFPageProxy, container: HTMLDivElement, width: number) => {
   emptyElement(container);
   pdf.AnnotationLayer.render({
     annotations: await page.getAnnotations(),
     div: container,
-    linkService: linkService.value,
+    linkService: linkService.value as PDFLinkService,
     page,
-    renderInteractiveForms: false,
     viewport: page
       .getViewport({
         scale: width / page.view[2],
-        rotation: props.rotation,
+        rotation: Number(props.rotation),
       })
       .clone({
         dontFlip: true,
       }),
-    imageResourcesPath: props.imageResourcesPath,
+    imageResourcesPath: props.imageResourcesPath as string,
+    downloadManager: undefined,
+    renderForms: false
   });
 };
 
@@ -319,14 +317,14 @@ const renderPageAnnotationLayer = async (page, container, width) => {
  * @param {HTMLElement} container - HTML container.
  * @param {number} width - Actual page width.
  */
-const renderPageTextLayer = async (page, container, width) => {
+const renderPageTextLayer = async (page: PDFPageProxy, container: HTMLDivElement, width: number) => {
   emptyElement(container);
   await pdf.renderTextLayer({
     container,
     textContent: await page.getTextContent(),
     viewport: page.getViewport({
       scale: width / page.view[2],
-      rotation: props.rotation,
+      rotation: Number(props.rotation),
     }),
   }).promise;
 };
@@ -337,24 +335,22 @@ onMounted(async () => {
 });
 
 onBeforeUnmount(() => {
-  releaseChildCanvases(pdfEmbed.value);
-  toRaw(pdfDocument.value)?.destroy();
+  if (pdfEmbed.value) releaseChildCanvases(pdfEmbed.value);
+  pdfDocument.value?.destroy();
 });
 
 defineExpose({ render });
 </script>
 
-<style lang="scss">
+<style>
 @import 'styles/text-layer';
 @import 'styles/annotation-layer';
 
-.vue-pdf-embed {
-  & > div {
-    position: relative;
-  }
+.vue-pdf-embed>div {
+  position: relative;
+}
 
-  canvas {
-    display: block;
-  }
+.vue-pdf-embed canvas {
+  display: block;
 }
 </style>
